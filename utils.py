@@ -61,10 +61,13 @@ def trimincompletesentence(txt):
     # Cache length of text
     ln = len(txt)
     # Find last instance of punctuation (Borrowed from Clover-Edition by cloveranon)
-    lastpunc = max(txt.rfind("."), txt.rfind("!"), txt.rfind("?"))
+    lastpunc = max(txt.rfind("."), txt.rfind("!"), txt.rfind("?"),
+            txt.rfind("。"), txt.rfind("！"), txt.rfind("？"))
     # Is this the end of a quote?
     if(lastpunc < ln-1):
         if(txt[lastpunc+1] == '"'):
+            lastpunc = lastpunc + 1
+        elif(txt[lastpunc+1] == '”'):
             lastpunc = lastpunc + 1
     if(lastpunc >= 0):
         txt = txt[:lastpunc+1]
