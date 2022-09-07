@@ -73,7 +73,8 @@ old_pretrainedtokenizerbase_from_pretrained = PreTrainedTokenizerBase.from_pretr
 @classmethod
 def new_pretrainedtokenizerbase_from_pretrained(cls, *args, **kwargs):
     tokenizer = old_pretrainedtokenizerbase_from_pretrained(cls, *args, **kwargs)
-    tokenizer._koboldai_header = tokenizer.encode("")
+    tokenizer._koboldai_header = tokenizer.encode("",
+            add_special_tokens=vars.enc_with_special_tokens)
     tokenizer.add_bos_token = False
     tokenizer.add_prefix_space = False
     return tokenizer
@@ -347,6 +348,7 @@ class vars:
     debug       = False # If set to true, will send debug information to the client for display
     lazy_load   = True  # Whether or not to use torch_lazy_loader.py for transformers models in order to reduce CPU memory usage
     use_colab_tpu = os.environ.get("COLAB_TPU_ADDR", "") != "" or os.environ.get("TPU_NAME", "") != ""  # Whether or not we're in a Colab TPU instance or Kaggle TPU instance and are going to use the TPU rather than the CPU
+    enc_with_special_tokens = True # Tokenizer.encode() params
 
 utils.vars = vars
 
@@ -994,6 +996,7 @@ if(vars.model not in ["InferKit", "Colab", "OAI", "GooseAI" , "ReadOnly", "TPUMe
         vars.badwordsids = vars.badwordsids_neox
     if vars.model.startswith("cpm1"):
         vars.badwordsids = vars.badwordsids_cpm1
+        vars.enc_with_special_tokens = False
 
 if(not vars.use_colab_tpu and vars.model not in ["InferKit", "Colab", "OAI", "GooseAI" , "ReadOnly", "TPUMeshTransformerGPTJ", "TPUMeshTransformerGPTNeoX"]):
     loadmodelsettings()
@@ -2091,7 +2094,8 @@ def lua_encode(string):
         from transformers import GPT2TokenizerFast
         global tokenizer
         tokenizer = GPT2TokenizerFast.from_pretrained("gpt2", revision=vars.revision, cache_dir="cache")
-    return tokenizer.encode(utils.encodenewlines(string), max_length=int(4e9), truncation=True)
+    return tokenizer.encode(utils.encodenewlines(string), max_length=int(4e9), truncation=True,
+            add_special_tokens=vars.enc_with_special_tokens)
 
 #==================================================================#
 #  Computes context given a submission, Lua array of entry UIDs and a Lua array
@@ -3374,21 +3378,25 @@ def calcsubmitbudget(actionlen, winfo, mem, anotetxt, actions, submission=None, 
     lnheader = len(tokenizer._koboldai_header)
 
     # Calculate token budget
-    prompttkns = tokenizer.encode(utils.encodenewlines(vars.comregex_ai.sub('', vars.prompt)), max_length=int(2e9), truncation=True)
+    prompttkns = tokenizer.encode(utils.encodenewlines(vars.comregex_ai.sub('', vars.prompt)), max_length=int(2e9), truncation=True,
+            add_special_tokens=vars.enc_with_special_tokens)
     lnprompt   = len(prompttkns)
 
-    memtokens = tokenizer.encode(utils.encodenewlines(mem), max_length=int(2e9), truncation=True)
+    memtokens = tokenizer.encode(utils.encodenewlines(mem), max_length=int(2e9), truncation=True,
+            add_special_tokens=vars.enc_with_special_tokens)
     lnmem     = len(memtokens)
     if(lnmem > vars.max_length - lnheader - lnsp - vars.genamt - budget_deduction):
         raise OverflowError("The memory in your story is too long. Please either write a shorter memory text or increase the Max Tokens setting. If you are using a soft prompt, additionally consider using a smaller soft prompt.")
 
-    witokens  = tokenizer.encode(utils.encodenewlines(winfo), max_length=int(2e9), truncation=True)
+    witokens  = tokenizer.encode(utils.encodenewlines(winfo), max_length=int(2e9), truncation=True,
+            add_special_tokens=vars.enc_with_special_tokens)
     lnwi      = len(witokens)
     if(lnmem + lnwi > vars.max_length - lnheader - lnsp - vars.genamt - budget_deduction):
         raise OverflowError("The current active world info keys take up too many tokens. Please either write shorter world info, decrease World Info Depth or increase the Max Tokens setting. If you are using a soft prompt, additionally consider using a smaller soft prompt.")
 
     if(anotetxt != ""):
-        anotetkns = tokenizer.encode(utils.encodenewlines(anotetxt), max_length=int(2e9), truncation=True)
+        anotetkns = tokenizer.encode(utils.encodenewlines(anotetxt), max_length=int(2e9), truncation=True,
+                add_special_tokens=vars.enc_with_special_tokens)
         lnanote   = len(anotetkns)
         if(lnmem + lnwi + lnanote > vars.max_length - lnheader - lnsp - vars.genamt - budget_deduction):
             raise OverflowError("The author's note in your story is too long. Please either write a shorter author's note or increase the Max Tokens setting. If you are using a soft prompt, additionally consider using a smaller soft prompt.")
@@ -3398,7 +3406,8 @@ def calcsubmitbudget(actionlen, winfo, mem, anotetxt, actions, submission=None, 
     else:
         budget = vars.max_length - lnheader - lnsp - lnmem - lnanote - lnwi - vars.genamt - budget_deduction
 
-    lnsubmission = len(tokenizer.encode(utils.encodenewlines(vars.comregex_ai.sub('', submission)), max_length=int(2e9), truncation=True)) if submission is not None else 0
+    lnsubmission = len(tokenizer.encode(utils.encodenewlines(vars.comregex_ai.sub('', submission)), max_length=int(2e9), truncation=True,
+            add_special_tokens=vars.enc_with_special_tokens)) if submission is not None else 0
     maybe_lnprompt = lnprompt if vars.useprompt and actionlen > 0 else 0
 
     if(lnmem + lnwi + lnanote + maybe_lnprompt + lnsubmission > vars.max_length - lnheader - lnsp - vars.genamt - budget_deduction):
@@ -3427,7 +3436,8 @@ def calcsubmitbudget(actionlen, winfo, mem, anotetxt, actions, submission=None, 
             assert budget >= 0
             if(budget <= 0):
                 break
-            acttkns = tokenizer.encode(utils.encodenewlines(chunk), max_length=int(2e9), truncation=True)
+            acttkns = tokenizer.encode(utils.encodenewlines(chunk), max_length=int(2e9), truncation=True,
+                    add_special_tokens=vars.enc_with_special_tokens)
             tknlen = len(acttkns)
             if(tknlen < budget):
                 tokens = acttkns + tokens
@@ -4046,8 +4056,10 @@ def getnewcontent(txt):
         return txt
     
     # Tokenize the last context and the generated content
-    ctxtokens = tokenizer.encode(utils.encodenewlines(vars.lastctx), max_length=int(2e9), truncation=True)
-    txttokens = tokenizer.encode(utils.encodenewlines(txt), max_length=int(2e9), truncation=True)
+    ctxtokens = tokenizer.encode(utils.encodenewlines(vars.lastctx), max_length=int(2e9), truncation=True,
+            add_special_tokens=vars.enc_with_special_tokens)
+    txttokens = tokenizer.encode(utils.encodenewlines(txt), max_length=int(2e9), truncation=True,
+            add_special_tokens=vars.enc_with_special_tokens)
     dif       = (len(txttokens) - len(ctxtokens)) * -1
     
     # Remove the context from the returned text
@@ -5561,7 +5573,8 @@ def __preempt_tokenizer():
     if("tokenizer" not in globals()):
         return
     utils.decodenewlines(tokenizer.decode([25678, 559]))
-    tokenizer.encode(utils.encodenewlines("eunoia"))
+    tokenizer.encode(utils.encodenewlines("eunoia"),
+            add_special_tokens=vars.enc_with_special_tokens)
 threading.Thread(target=__preempt_tokenizer).start()
 
 # Load soft prompt specified by the settings file, if applicable
